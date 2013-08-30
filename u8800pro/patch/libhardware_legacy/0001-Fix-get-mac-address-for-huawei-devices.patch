@@ -1,0 +1,84 @@
+From f15305e8a7e38692c31c8d13ec332439f74d6206 Mon Sep 17 00:00:00 2001
+From: ivan198 <ivan198@gmail.com>
+Date: Fri, 12 Jul 2013 01:57:38 +0800
+Subject: [PATCH] Fix get mac address for huawei devices
+
+Change-Id: I0e472b0a371fc0ca9c001b2f8edf86f355658d48
+---
+ wifi/Android.mk |    6 +++++-
+ wifi/wifi.c     |   24 ++++++++++++++++++++++++
+ 2 files changed, 29 insertions(+), 1 deletion(-)
+
+diff --git a/wifi/Android.mk b/wifi/Android.mk
+index 51afe3a..85cca4b 100644
+--- a/wifi/Android.mk
++++ b/wifi/Android.mk
+@@ -45,8 +45,12 @@ endif
+ 
+ LOCAL_SRC_FILES += wifi/wifi.c
+ 
++ifeq ($(BOARD_USE_HUAWEI_BCM_WIFI),true)
++    LOCAL_CFLAGS += -DHUAWEI_BCM_WIFI
++endif
++
+ ifeq ($(BOARD_HAVE_SAMSUNG_WIFI),true)
+ LOCAL_CFLAGS += -DSAMSUNG_WIFI
+ endif
+ 
+-LOCAL_SHARED_LIBRARIES += libnetutils
++LOCAL_SHARED_LIBRARIES += libnetutils libhwrpc
+diff --git a/wifi/wifi.c b/wifi/wifi.c
+index 90b7632..486699f 100644
+--- a/wifi/wifi.c
++++ b/wifi/wifi.c
+@@ -148,6 +148,9 @@ static unsigned char dummy_key[21] = { 0x02, 0x11, 0xbe, 0x33, 0x43, 0x35,
+                                        0x1c, 0xd3, 0xee, 0xff, 0xf1, 0xe2,
+                                        0xf3, 0xf4, 0xf5 };
+ 
++#ifdef HUAWEI_BCM_WIFI
++extern void huawei_oem_rapi_streaming_function(int n, int p1, int p2, int p3, int *v1, int *v2, int *v3);
++#endif
+ /* Is either SUPPLICANT_NAME or P2P_SUPPLICANT_NAME */
+ static char supplicant_name[PROPERTY_VALUE_MAX];
+ /* Is either SUPP_PROP_NAME or P2P_PROP_NAME */
+@@ -188,6 +191,21 @@ char* get_samsung_wifi_type()
+ }
+ #endif
+ 
++#ifdef HUAWEI_BCM_WIFI
++void getmac(char *mac_param)
++{
++    char x[8];
++    int  y;
++
++    memset(x,0,8);
++    y=0;
++    huawei_oem_rapi_streaming_function(3,0,0,0,0,&y,x);
++    ALOGI("huawei_oem_rapi_streaming_function %p %x %x",x,x[0],y);
++    sprintf(mac_param,"mac_param=%02X:%02X:%02X:%02X:%02X:%02X %s",x[5],x[4],x[3],x[2],x[1],x[0],DRIVER_MODULE_ARG);
++    ALOGI("Got MAC Address: %s ",mac_param);
++}
++#endif
++
+ static int insmod(const char *filename, const char *args)
+ {
+     void *module;
+@@ -308,9 +326,15 @@ int wifi_load_driver()
+         return -1;
+     usleep(200000);
+ #endif
++#ifdef HUAWEI_BCM_WIFI
++    char mac_param[64];
+ 
++    getmac(mac_param);
++    if (insmod(DRIVER_MODULE_PATH, mac_param) < 0) {
++#else
+     if (insmod(DRIVER_MODULE_PATH, DRIVER_MODULE_ARG) < 0) {
+ #endif
++#endif
+ 
+ #ifdef WIFI_EXT_MODULE_NAME
+         rmmod(EXT_MODULE_NAME);
+-- 
+1.7.9.5
+
